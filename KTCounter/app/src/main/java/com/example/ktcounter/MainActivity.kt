@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -21,8 +22,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.room.Room
+import coil3.compose.AsyncImage
 import com.example.ktcounter.ui.theme.KTCounterTheme
 import kotlinx.coroutines.launch
+import retrofit2.Retrofit
+import retrofit2.converter.moshi.MoshiConverterFactory
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -38,11 +42,20 @@ class MainActivity : ComponentActivity() {
 
         val dao = db.counterDao()
 
+        // Retrofit Object
+
+        val retrofit = Retrofit.Builder()
+            .baseUrl("https://dog.ceo/api/")
+            .addConverterFactory(MoshiConverterFactory.create())
+            .build()
+
+        val dogApiService = retrofit.create(DogApiService::class.java)
+
         setContent {
             KTCounterTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     Column(modifier = Modifier.padding(innerPadding)) {
-                        Greeting("Zebra"); Counter(dao = dao, modifier = Modifier)
+                        Greeting("Zebra"); Counter(dao = dao, dogApiService = dogApiService, modifier = Modifier)
 
                     }
 
@@ -75,9 +88,11 @@ fun Counter(modifier: Modifier= Modifier) {
 */
 // Counter with DBMS
 @Composable
-fun Counter(dao: CounterDao, modifier: Modifier = Modifier) {
+fun Counter(dao: CounterDao, dogApiService: DogApiService, modifier: Modifier = Modifier) {
     var count by remember { mutableIntStateOf(0) }
+    var imageUrl by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+
 
     LaunchedEffect(Unit) {
         count = dao.getCounter()?.count ?: 0
@@ -90,8 +105,21 @@ fun Counter(dao: CounterDao, modifier: Modifier = Modifier) {
             scope.launch {
                 dao.upsertCounter(CounterEntity(id = 1, count = count))
             }
+            if (count % 20 == 0) {
+                scope.launch {
+                    val result = dogApiService.getRandomDogImage()
+                    imageUrl = result.message
+                }
+            }
         }) {
             Text(text = "Increment")
+        }
+
+        imageUrl?.let { url ->
+            AsyncImage(
+                model = url,
+                contentDescription = "A random dog"
+            )
         }
     }
 }
